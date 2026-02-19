@@ -68,13 +68,15 @@
     .leaderboard ul {
       list-style: none;
       padding: 0;
+      max-height: 260px;
+      overflow-y: auto;
     }
 
     .leaderboard li {
       background: rgba(255,255,255,0.1);
       margin: 5px auto;
       padding: 8px 16px;
-      width: 220px;
+      width: 240px;
       border-radius: 10px;
     }
 
@@ -92,10 +94,10 @@
   <h1>🌌 COSMIC RACE</h1>
 
   <input id="nickname" placeholder="Введи ник пилота" />
-  <button onclick="startRace()">НОВАЯ ГОНКА</button>
+  <button onclick="startRace()">СТАРТ ПОЛЁТА</button>
 
   <div class="leaderboard">
-    <h2>🏆 ТОП‑3 ПИЛОТА</h2>
+    <h2>🏆 ГЛОБАЛЬНЫЙ РЕЙТИНГ</h2>
     <ul id="rating"></ul>
   </div>
 
@@ -108,7 +110,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <script>
-  // Конфигурация Firebase
   const firebaseConfig = {
     apiKey: "AIzaSyCBb34F6rvslXnwv9HTddwPltllNMJjJMA",
     authDomain: "raketa-de669.firebaseapp.com",
@@ -122,10 +123,8 @@
 
   const auth = firebase.auth();
   const db = firebase.firestore();
-
   const errorBox = document.getElementById("error");
 
-  // Анонимный вход — ОБЯЗАТЕЛЬНО для правил безопасности Firestore
   auth.signInAnonymously().catch(err => {
     errorBox.textContent = "Ошибка входа: " + err.message;
   });
@@ -134,7 +133,6 @@
     errorBox.textContent = "";
 
     const name = document.getElementById("nickname").value.trim() || "Pilot";
-
     const score = Math.floor(Math.random() * 1000);
 
     try {
@@ -160,13 +158,13 @@
       const snap = await db
         .collection("scores")
         .orderBy("score", "desc")
-        .limit(3)
+        .limit(10)
         .get();
 
-      snap.forEach(doc => {
+      snap.forEach((doc, i) => {
         const data = doc.data();
         const li = document.createElement("li");
-        li.textContent = `${data.name} — ${data.score}`;
+        li.textContent = `#${i + 1} ${data.name} — ${data.score}`;
         list.appendChild(li);
       });
     } catch (e) {
@@ -182,9 +180,9 @@
         .orderBy("score", "desc")
         .get();
 
-      if (snap.size <= 10) return;
+      if (snap.size <= 20) return;
 
-      const extra = snap.docs.slice(10);
+      const extra = snap.docs.slice(20);
       for (const doc of extra) {
         await doc.ref.delete();
       }
@@ -193,12 +191,10 @@
     }
   }
 
-  // загружаем рейтинг после входа
   auth.onAuthStateChanged(user => {
     if (user) loadRating();
   });
 
-  // ⭐ АНИМАЦИЯ ЗВЁЗД
   const canvas = document.getElementById("stars");
   const ctx = canvas.getContext("2d");
 
@@ -210,11 +206,11 @@
   resize();
   window.addEventListener("resize", resize);
 
-  const stars = Array.from({ length: 120 }, () => ({
+  const stars = Array.from({ length: 140 }, () => ({
     x: Math.random() * canvas.width,
     y: Math.random() * canvas.height,
     r: Math.random() * 1.5,
-    speed: Math.random() * 0.5 + 0.2
+    speed: Math.random() * 0.6 + 0.2
   }));
 
   function animate() {
