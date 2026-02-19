@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Космическая гонка</title>
+  
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -23,15 +30,9 @@
       position: fixed;
       width: 100%;
       height: 100%;
-      background: transparent url("https://raw.githubusercontent.com/VincentGarreau/particles.js/master/demo/media/star.png") repeat;
-      animation: moveStars 60s linear infinite;
+      background: transparent;
       z-index: -1;
       opacity: 0.6;
-    }
-
-    @keyframes moveStars {
-      from { background-position: 0 0; }
-      to { background-position: -10000px 5000px; }
     }
 
     .menu, .game, .win {
@@ -39,10 +40,13 @@
       flex-direction: column;
       align-items: center;
       gap: 16px;
-      background: rgba(0,0,40,0.6);
+      background: rgba(0,0,40,0.8);
       padding: 24px;
       border-radius: 16px;
       box-shadow: 0 0 20px rgba(0,0,0,0.6);
+      max-width: 600px;
+      max-height: 90vh;
+      overflow-y: auto;
     }
 
     .menu.active, .game.active, .win.active {
@@ -67,12 +71,14 @@
     button:active { transform: scale(0.95); }
 
     .track {
-      width: 320px;
-      height: 80px;
+      width: 100%;
+      height: 60px;
       background: #111133;
-      border-radius: 40px;
+      border-radius: 10px;
       position: relative;
       overflow: hidden;
+      margin: 10px 0;
+      border: 2px solid #4c7cff;
     }
 
     .ship {
@@ -80,23 +86,55 @@
       top: 50%;
       left: 0;
       transform: translateY(-50%);
-      font-size: 32px;
-      transition: left .1s linear;
+      font-size: 28px;
+      transition: left .2s linear;
     }
 
     .finish {
       position: absolute;
       right: 0;
       top: 0;
-      width: 6px;
+      width: 4px;
       height: 100%;
       background: gold;
     }
 
-    .progress {
-      font-size: 14px;
-      opacity: 0.8;
+    .player-item {
+      width: 100%;
+      padding: 12px;
+      background: rgba(76, 124, 255, 0.2);
+      border-radius: 8px;
+      margin: 8px 0;
+      border-left: 4px solid #4c7cff;
     }
+
+    .player-name {
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .progress {
+      font-size: 12px;
+      opacity: 0.8;
+      margin-top: 4px;
+    }
+
+    .players-list {
+      width: 100%;
+      max-height: 300px;
+      overflow-y: auto;
+      margin: 10px 0;
+    }
+
+    .game-status {
+      font-size: 18px;
+      font-weight: bold;
+      color: #4c7cff;
+      margin-bottom: 10px;
+    }
+
+    h1 { margin-bottom: 20px; }
+    h2 { margin-bottom: 20px; }
   </style>
 </head>
 <body>
@@ -105,64 +143,207 @@
   <!-- МЕНЮ -->
   <div class="menu active" id="menu">
     <h1>🚀 Космическая гонка</h1>
-    <input id="nickname" placeholder="Введите ник" />
-    <button id="startBtn">Старт</button>
+    <p style="opacity: 0.7;">Многопользовательская онлайн-игра</p>
+    <input id="nickname" placeholder="Введите ник" maxlength="15" />
+    <button id="joinBtn">Присоединиться</button>
+    <p id="connectionStatus" style="font-size: 12px; opacity: 0.6;">Подключение...</p>
   </div>
 
   <!-- ИГРА -->
   <div class="game" id="game">
-    <div class="track">
-      <div class="ship" id="ship">🚀</div>
-      <div class="finish"></div>
+    <div class="game-status" id="gameStatus">Статус: ЛОББИ</div>
+    <button id="startGameBtn">Начать гонку</button>
+    
+    <h3>Участники:</h3>
+    <div class="players-list" id="playersList"></div>
+    
+    <div id="yourTrack" style="width: 100%; margin-top: 20px;">
+      <p style="margin-bottom: 10px;"><strong>Ваш полёт:</strong></p>
+      <div class="track">
+        <div class="ship" id="ship">🚀</div>
+        <div class="finish"></div>
+      </div>
+      <div class="progress" id="progress">0%</div>
+      <button id="moveBtn">Ускорить</button>
     </div>
-    <div class="progress" id="progress">0%</div>
-    <button id="moveBtn">Лететь</button>
   </div>
 
   <!-- ЭКРАН ПОБЕДЫ -->
   <div class="win" id="win">
-    <h2 id="winnerText">Победа!</h2>
-    <button onclick="restart()">Играть снова</button>
+    <h2 id="winnerText">Гонка окончена!</h2>
+    <button onclick="restartGame()">Новая гонка</button>
   </div>
 
   <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCBb34F6rvslXnwv9HTddwPltllNMJjJMA",
+      authDomain: "raketa-de669.firebaseapp.com",
+      projectId: "raketa-de669",
+      storageBucket: "raketa-de669.firebasestorage.app",
+      messagingSenderId: "993322074392",
+      appId: "1:993322074392:web:f6768a9065cce493ee1e6d"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
     const menu = document.getElementById('menu');
     const game = document.getElementById('game');
     const win = document.getElementById('win');
 
     const ship = document.getElementById('ship');
     const progressText = document.getElementById('progress');
+    const gameStatus = document.getElementById('gameStatus');
+    const playersList = document.getElementById('playersList');
     const winnerText = document.getElementById('winnerText');
+    const connectionStatus = document.getElementById('connectionStatus');
 
-    let progress = 0;
+    let currentUser = null;
     let nickname = '';
+    let progress = 0;
+    let gameState = null;
+    let userId = null;
 
-    document.getElementById('startBtn').addEventListener('click', () => {
+    // Вход в игру
+    auth.signInAnonymously().then(result => {
+      userId = result.user.uid;
+      connectionStatus.textContent = '✓ Подключено';
+      connectionStatus.style.color = '#00ff00';
+    });
+
+    document.getElementById('joinBtn').addEventListener('click', () => {
       const nameInput = document.getElementById('nickname').value.trim();
-
       if (!nameInput) {
         alert('Введите ник');
         return;
       }
 
       nickname = nameInput;
-      progress = 0;
-      updateShip();
-
-      menu.classList.remove('active');
-      game.classList.add('active');
+      joinGame();
     });
 
-    document.getElementById('moveBtn').addEventListener('click', () => {
-      if (progress >= 100) return;
+    async function joinGame() {
+      try {
+        // Добавляем игрока в комнату
+        await db.collection('games').doc('race_room').set({
+          [`players.${userId}`]: {
+            nickname: nickname,
+            progress: 0,
+            isReady: false,
+            joinedAt: new Date()
+          }
+        }, { merge: true });
 
-      progress += Math.floor(Math.random() * 15) + 5; // шаг 5–20
+        menu.classList.remove('active');
+        game.classList.add('active');
+        listenToGame();
+      } catch (err) {
+        alert('Ошибка подключения: ' + err.message);
+      }
+    }
+
+    function listenToGame() {
+      db.collection('games').doc('race_room').onSnapshot(doc => {
+        if (!doc.exists) return;
+
+        gameState = doc.data();
+        gameStatus.textContent = `Статус: ${gameState.status || 'ЛОББИ'}`;
+
+        // Обновляем список игроков
+        renderPlayers(gameState.players || {});
+
+        // Если игра началась, разблокируем кнопку
+        const startBtn = document.getElementById('startGameBtn');
+        if (gameState.status === 'ЛОББИ') {
+          startBtn.disabled = false;
+          startBtn.textContent = 'Начать гонку';
+        } else if (gameState.status === 'ГОНКА') {
+          startBtn.disabled = true;
+          startBtn.textContent = 'Гонка идёт...';
+        }
+
+        // Если кто-то выиграл
+        if (gameState.status === 'ЗАВЕРШЕНА' && gameState.winner) {
+          showWin(gameState.winner);
+        }
+
+        // Обновляем наш прогресс
+        if (gameState.players && gameState.players[userId]) {
+          progress = gameState.players[userId].progress || 0;
+          updateShip();
+        }
+      });
+    }
+
+    function renderPlayers(players) {
+      playersList.innerHTML = '';
+      const sorted = Object.entries(players)
+        .sort((a, b) => b[1].progress - a[1].progress);
+
+      sorted.forEach(([id, player], idx) => {
+        const div = document.createElement('div');
+        div.className = 'player-item';
+        div.innerHTML = `
+          <div class="player-name">${idx + 1}. ${player.nickname} ${id === userId ? '(Вы)' : ''}</div>
+          <div class="track" style="height: 30px;">
+            <div class="ship" style="font-size: 20px;">🚀</div>
+            <div class="finish"></div>
+          </div>
+          <div class="progress">${Math.round(player.progress || 0)}%</div>
+        `;
+        playersList.appendChild(div);
+
+        // Обновляем визуальное положение корабля
+        const shipEl = div.querySelector('.ship');
+        shipEl.style.left = (player.progress || 0) + '%';
+      });
+    }
+
+    document.getElementById('startGameBtn').addEventListener('click', async () => {
+      if (!gameState || gameState.status !== 'ЛОББИ') return;
+
+      try {
+        await db.collection('games').doc('race_room').update({
+          status: 'ГОНКА',
+          startTime: new Date()
+        });
+      } catch (err) {
+        console.error('Ошибка:', err);
+      }
+    });
+
+    document.getElementById('moveBtn').addEventListener('click', async () => {
+      if (!gameState || gameState.status !== 'ГОНКА') {
+        alert('Гонка ещё не началась или уже закончилась');
+        return;
+      }
+
+      if (progress >= 100) {
+        alert('Вы уже финишировали!');
+        return;
+      }
+
+      progress += Math.floor(Math.random() * 15) + 5;
       if (progress > 100) progress = 100;
 
       updateShip();
 
-      if (progress === 100) {
-        showWin();
+      // Отправляем прогресс на сервер
+      try {
+        await db.collection('games').doc('race_room').update({
+          [`players.${userId}.progress`]: progress
+        });
+
+        // Если финишировали, отмечаем победителя
+        if (progress === 100 && !gameState.winner) {
+          await db.collection('games').doc('race_room').update({
+            status: 'ЗАВЕРШЕНА',
+            winner: nickname
+          });
+        }
+      } catch (err) {
+        console.error('Ошибка обновления:', err);
       }
     });
 
@@ -171,24 +352,23 @@
       progressText.textContent = progress + '%';
     }
 
-    function showWin() {
+    function showWin(winner) {
       game.classList.remove('active');
       win.classList.add('active');
-      winnerText.textContent = `🏆 ${nickname}, вы выиграли!`;
+      winnerText.textContent = `🏆 ${winner} выиграл гонку!`;
     }
 
-    function restart() {
-      win.classList.remove('active');
-      menu.classList.add('active');
-      document.getElementById('nickname').value = '';
-      progress = 0;
-      updateShip();
+    function restartGame() {
+      try {
+        db.collection('games').doc('race_room').delete();
+        progress = 0;
+        win.classList.remove('active');
+        menu.classList.add('active');
+        document.getElementById('nickname').value = '';
+      } catch (err) {
+        console.error('Ошибка перезагрузки:', err);
+      }
     }
-
-    /* ==== ПРОСТЫЕ ТЕСТЫ (чтобы игра не ломалась) ==== */
-    console.assert(typeof updateShip === 'function', 'updateShip должна существовать');
-    console.assert(typeof showWin === 'function', 'showWin должна существовать');
-    console.assert(typeof restart === 'function', 'restart должна существовать');
   </script>
 </body>
 </html>
