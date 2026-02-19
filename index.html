@@ -9,7 +9,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -23,16 +22,6 @@
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-
-    /* Анимированные звёзды */
-    .stars {
-      position: fixed;
-      width: 100%;
-      height: 100%;
-      background: transparent;
-      z-index: -1;
-      opacity: 0.6;
     }
 
     .menu, .game, .win {
@@ -58,6 +47,8 @@
       border-radius: 10px;
       border: none;
       font-size: 16px;
+      width: 100%;
+      max-width: 300px;
     }
 
     button {
@@ -69,6 +60,7 @@
 
     button:hover { background: #6a92ff; }
     button:active { transform: scale(0.95); }
+    button:disabled { background: #999; cursor: not-allowed; }
 
     .track {
       width: 100%;
@@ -124,6 +116,9 @@
       max-height: 300px;
       overflow-y: auto;
       margin: 10px 0;
+      border: 1px solid #4c7cff;
+      padding: 10px;
+      border-radius: 8px;
     }
 
     .game-status {
@@ -133,12 +128,24 @@
       margin-bottom: 10px;
     }
 
+    .status-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+
+    .status-online { background: #00ff00; }
+    .status-offline { background: #ff0000; }
+
     h1 { margin-bottom: 20px; }
     h2 { margin-bottom: 20px; }
+
+    .info { font-size: 12px; opacity: 0.7; margin: 10px 0; }
   </style>
 </head>
 <body>
-  <div class="stars"></div>
 
   <!-- МЕНЮ -->
   <div class="menu active" id="menu">
@@ -146,16 +153,22 @@
     <p style="opacity: 0.7;">Многопользовательская онлайн-игра</p>
     <input id="nickname" placeholder="Введите ник" maxlength="15" />
     <button id="joinBtn">Присоединиться</button>
-    <p id="connectionStatus" style="font-size: 12px; opacity: 0.6;">Подключение...</p>
+    <p id="connectionStatus" class="info">
+      <span class="status-indicator status-offline"></span>Подключение...
+    </p>
   </div>
 
   <!-- ИГРА -->
   <div class="game" id="game">
     <div class="game-status" id="gameStatus">Статус: ЛОББИ</div>
-    <button id="startGameBtn">Начать гонку</button>
     
-    <h3>Участники:</h3>
-    <div class="players-list" id="playersList"></div>
+    <button id="startGameBtn">Начать гонку</button>
+    <button id="leaveBtn" style="background: #ff6b6b; margin-top: 10px;">Выйти из игры</button>
+    
+    <h3>Участники: <span id="playerCount">0</span></h3>
+    <div class="players-list" id="playersList">
+      <p style="opacity: 0.5; text-align: center;">Загрузка участников...</p>
+    </div>
     
     <div id="yourTrack" style="width: 100%; margin-top: 20px;">
       <p style="margin-bottom: 10px;"><strong>Ваш полёт:</strong></p>
@@ -196,6 +209,7 @@
     const progressText = document.getElementById('progress');
     const gameStatus = document.getElementById('gameStatus');
     const playersList = document.getElementById('playersList');
+    const playerCount = document.getElementById('playerCount');
     const winnerText = document.getElementById('winnerText');
     const connectionStatus = document.getElementById('connectionStatus');
 
@@ -204,12 +218,17 @@
     let progress = 0;
     let gameState = null;
     let userId = null;
+    let isInGame = false;
 
     // Вход в игру
     auth.signInAnonymously().then(result => {
       userId = result.user.uid;
-      connectionStatus.textContent = '✓ Подключено';
+      connectionStatus.innerHTML = '<span class="status-indicator status-online"></span>Подключено';
       connectionStatus.style.color = '#00ff00';
+      console.log('User ID:', userId);
+    }).catch(err => {
+      alert('Ошибка подключения: ' + err.message);
+      connectionStatus.innerHTML = '<span class="status-indicator status-offline"></span>Ошибка подключения';
     });
 
     document.getElementById('joinBtn').addEventListener('click', () => {
@@ -225,78 +244,101 @@
 
     async function joinGame() {
       try {
-        // Добавляем игрока в комнату
-        await db.collection('games').doc('race_room').set({
+        console.log('Joining game with nickname:', nickname);
+        
+        // Создаём или обновляем документ игры
+        const gameRef = db.collection('games').doc('race_room');
+        
+        await gameRef.set({
+          lastUpdate: new Date(),
           [`players.${userId}`]: {
             nickname: nickname,
             progress: 0,
-            isReady: false,
-            joinedAt: new Date()
+            joinedAt: new Date().getTime()
           }
         }, { merge: true });
 
+        isInGame = true;
         menu.classList.remove('active');
         game.classList.add('active');
         listenToGame();
+        console.log('Successfully joined game');
       } catch (err) {
+        console.error('Error joining game:', err);
         alert('Ошибка подключения: ' + err.message);
       }
     }
 
     function listenToGame() {
-      db.collection('games').doc('race_room').onSnapshot(doc => {
-        if (!doc.exists) return;
+      db.collection('games').doc('race_room').onSnapshot(
+        (doc) => {
+          if (!doc.exists) {
+            console.log('Game document does not exist');
+            playersList.innerHTML = '<p style="opacity: 0.5;">Ожидание игроков...</p>';
+            return;
+          }
 
-        gameState = doc.data();
-        gameStatus.textContent = `Статус: ${gameState.status || 'ЛОББИ'}`;
+          gameState = doc.data();
+          console.log('Game state updated:', gameState);
+          
+          gameStatus.textContent = `Статус: ${gameState.status || 'ЛОББИ'}`;
 
-        // Обновляем список игроков
-        renderPlayers(gameState.players || {});
+          // Обновляем список игроков
+          const players = gameState.players || {};
+          renderPlayers(players);
+          playerCount.textContent = Object.keys(players).length;
 
-        // Если игра началась, разблокируем кнопку
-        const startBtn = document.getElementById('startGameBtn');
-        if (gameState.status === 'ЛОББИ') {
-          startBtn.disabled = false;
-          startBtn.textContent = 'Начать гонку';
-        } else if (gameState.status === 'ГОНКА') {
-          startBtn.disabled = true;
-          startBtn.textContent = 'Гонка идёт...';
+          // Если игра началась, разблокируем кнопку
+          const startBtn = document.getElementById('startGameBtn');
+          if (gameState.status === 'ЛОББИ') {
+            startBtn.disabled = false;
+            startBtn.textContent = 'Начать гонку';
+          } else if (gameState.status === 'ГОНКА') {
+            startBtn.disabled = true;
+            startBtn.textContent = 'Гонка идёт...';
+          }
+
+          // Если кто-то выиграл
+          if (gameState.status === 'ЗАВЕРШЕНА' && gameState.winner) {
+            showWin(gameState.winner);
+          }
+
+          // Обновляем наш прогресс
+          if (players[userId]) {
+            progress = players[userId].progress || 0;
+            updateShip();
+          }
+        },
+        (error) => {
+          console.error('Error listening to game:', error);
+          alert('Ошибка синхронизации: ' + error.message);
         }
-
-        // Если кто-то выиграл
-        if (gameState.status === 'ЗАВЕРШЕНА' && gameState.winner) {
-          showWin(gameState.winner);
-        }
-
-        // Обновляем наш прогресс
-        if (gameState.players && gameState.players[userId]) {
-          progress = gameState.players[userId].progress || 0;
-          updateShip();
-        }
-      });
+      );
     }
 
     function renderPlayers(players) {
+      if (Object.keys(players).length === 0) {
+        playersList.innerHTML = '<p style="opacity: 0.5;">Ожидание игроков...</p>';
+        return;
+      }
+
       playersList.innerHTML = '';
       const sorted = Object.entries(players)
-        .sort((a, b) => b[1].progress - a[1].progress);
+        .sort((a, b) => (b[1].progress || 0) - (a[1].progress || 0));
 
       sorted.forEach(([id, player], idx) => {
         const div = document.createElement('div');
         div.className = 'player-item';
+        const isYou = id === userId ? '(Вы)' : '';
         div.innerHTML = `
-          <div class="player-name">${idx + 1}. ${player.nickname} ${id === userId ? '(Вы)' : ''}</div>
+          <div class="player-name">#${idx + 1} ${player.nickname} ${isYou}</div>
           <div class="track" style="height: 30px;">
-            <div class="ship" style="font-size: 20px;">🚀</div>
+            <div class="ship" style="font-size: 20px; left: ${player.progress || 0}%;">🚀</div>
             <div class="finish"></div>
           </div>
           <div class="progress">${Math.round(player.progress || 0)}%</div>
         `;
         playersList.appendChild(div);
-
-        // Обновляем визуальное положение корабля
-        const shipEl = div.querySelector('.ship');
-        shipEl.style.left = (player.progress || 0) + '%';
       });
     }
 
@@ -309,7 +351,7 @@
           startTime: new Date()
         });
       } catch (err) {
-        console.error('Ошибка:', err);
+        console.error('Error starting game:', err);
       }
     });
 
@@ -329,13 +371,12 @@
 
       updateShip();
 
-      // Отправляем прогресс на сервер
       try {
         await db.collection('games').doc('race_room').update({
-          [`players.${userId}.progress`]: progress
+          [`players.${userId}.progress`]: progress,
+          lastUpdate: new Date()
         });
 
-        // Если финишировали, отмечаем победителя
         if (progress === 100 && !gameState.winner) {
           await db.collection('games').doc('race_room').update({
             status: 'ЗАВЕРШЕНА',
@@ -343,7 +384,24 @@
           });
         }
       } catch (err) {
-        console.error('Ошибка обновления:', err);
+        console.error('Error updating progress:', err);
+      }
+    });
+
+    document.getElementById('leaveBtn').addEventListener('click', async () => {
+      try {
+        if (userId && isInGame) {
+          await db.collection('games').doc('race_room').update({
+            [`players.${userId}`]: firebase.firestore.FieldValue.delete()
+          });
+        }
+        isInGame = false;
+        progress = 0;
+        game.classList.remove('active');
+        menu.classList.add('active');
+        document.getElementById('nickname').value = '';
+      } catch (err) {
+        console.error('Error leaving game:', err);
       }
     });
 
@@ -361,12 +419,13 @@
     function restartGame() {
       try {
         db.collection('games').doc('race_room').delete();
+        isInGame = false;
         progress = 0;
         win.classList.remove('active');
         menu.classList.add('active');
         document.getElementById('nickname').value = '';
       } catch (err) {
-        console.error('Ошибка перезагрузки:', err);
+        console.error('Error restarting game:', err);
       }
     }
   </script>
