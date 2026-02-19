@@ -1,224 +1,240 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cosmic Race</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cosmic Race</title>
 
+  <!-- Космический стиль -->
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      color: white;
+      overflow: hidden;
+      background: radial-gradient(circle at bottom, #020111 0%, #000000 70%);
+    }
+
+    canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: -1;
+    }
+
+    .container {
+      text-align: center;
+      margin-top: 80px;
+    }
+
+    h1 {
+      font-size: 42px;
+      letter-spacing: 3px;
+    }
+
+    input {
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+
+    button {
+      display: block;
+      margin: 20px auto;
+      padding: 12px 24px;
+      border-radius: 12px;
+      border: none;
+      background: #ffffff;
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    button:hover {
+      transform: scale(1.05);
+    }
+
+    .leaderboard {
+      margin-top: 30px;
+    }
+
+    .leaderboard h2 {
+      margin-bottom: 10px;
+    }
+
+    .leaderboard ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .leaderboard li {
+      background: rgba(255,255,255,0.1);
+      margin: 5px auto;
+      padding: 8px 16px;
+      width: 220px;
+      border-radius: 10px;
+    }
+
+    .error {
+      color: #ff6b6b;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<div class="container">
+  <h1>🌌 COSMIC RACE</h1>
+
+  <input id="nickname" placeholder="Введи ник пилота" />
+  <button onclick="startRace()">НОВАЯ ГОНКА</button>
+
+  <div class="leaderboard">
+    <h2>🏆 ТОП‑3 ПИЛОТА</h2>
+    <ul id="rating"></ul>
+  </div>
+
+  <div id="error" class="error"></div>
+</div>
+
+<!-- Firebase CDN -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
-<style>
-body{
-  margin:0;
-  background:#020617;
-  color:#e2e8f0;
-  font-family:monospace;
-}
-
-.container{
-  max-width:420px;
-  margin:auto;
-  padding:20px;
-}
-
-.card{
-  background:#020617;
-  border:1px solid #1e293b;
-  border-radius:24px;
-  padding:24px;
-  box-shadow:0 20px 40px rgba(0,0,0,.5);
-  text-align:center;
-}
-
-.btn{
-  width:100%;
-  padding:16px;
-  border-radius:16px;
-  border:none;
-  font-weight:bold;
-  cursor:pointer;
-  margin-top:10px;
-}
-
-.join{background:#06b6d4;color:white;}
-.start{background:#10b981;color:white;}
-.reset{background:white;color:black;}
-.push{
-  width:130px;height:130px;border-radius:50%;
-  background:linear-gradient(135deg,#06b6d4,#1d4ed8);
-  color:white;font-size:26px;font-weight:bold;
-  display:flex;align-items:center;justify-content:center;
-  margin:auto;border:4px solid rgba(255,255,255,.2);
-}
-
-.player{
-  background:#020617;
-  border:1px solid #1e293b;
-  border-radius:16px;
-  padding:12px;
-  margin:8px 0;
-}
-
-.bar{
-  height:4px;
-  background:#334155;
-  border-radius:4px;
-  overflow:hidden;
-}
-
-.fill{
-  height:100%;
-  background:#06b6d4;
-}
-</style>
-</head>
-
-<body>
-<div class="container">
-
-<h1>COSMIC RACE</h1>
-<p id="status">Загрузка...</p>
-
-<div class="card" id="main"></div>
-
-<h3>Телеметрия</h3>
-<div id="players"></div>
-
-</div>
-
 <script>
-const firebaseConfig = {
-  apiKey:"AIzaSyCBb34F6rvslXnwv9HTddwPltllNMJjJMA",
-  authDomain:"raketa-de669.firebaseapp.com",
-  projectId:"raketa-de669",
-  storageBucket:"raketa-de669.firebasestorage.app",
-  messagingSenderId:"993322074392",
-  appId:"1:993322074392:web:f6768a9065cce493ee1e6d"
-};
+  // Конфигурация Firebase
+  const firebaseConfig = {
+    apiKey: "AIzaSyCBb34F6rvslXnwv9HTddwPltllNMJjJMA",
+    authDomain: "raketa-de669.firebaseapp.com",
+    projectId: "raketa-de669",
+    storageBucket: "raketa-de669.firebasestorage.app",
+    messagingSenderId: "993322074392",
+    appId: "1:993322074392:web:f6768a9065cce493ee1e6d"
+  };
 
-firebase.initializeApp(firebaseConfig);
-const auth=firebase.auth();
-const db=firebase.firestore();
+  firebase.initializeApp(firebaseConfig);
 
-const DOC="artifacts/cosmic-race-v1/public/data/cosmic_race/race_state";
+  const auth = firebase.auth();
+  const db = firebase.firestore();
 
-let user=null;
-let race=null;
+  const errorBox = document.getElementById("error");
 
-auth.signInAnonymously();
+  // Анонимный вход — ОБЯЗАТЕЛЬНО для правил безопасности Firestore
+  auth.signInAnonymously().catch(err => {
+    errorBox.textContent = "Ошибка входа: " + err.message;
+  });
 
-auth.onAuthStateChanged(u=>{
-  user=u;
-  listen();
-});
+  async function startRace() {
+    errorBox.textContent = "";
 
-function listen(){
-  db.doc(DOC).onSnapshot(s=>{
-    if(!s.exists){
-      db.doc(DOC).set({
-        raceStatus:"LOBBY",
-        players:{},
-        winnerId:null,
-        distanceToWin:100,
-        lastUpdate:Date.now()
+    const name = document.getElementById("nickname").value.trim() || "Pilot";
+
+    const score = Math.floor(Math.random() * 1000);
+
+    try {
+      await db.collection("scores").add({
+        name,
+        score,
+        time: Date.now()
       });
-      return;
+
+      await cleanOldScores();
+      await loadRating();
+    } catch (e) {
+      errorBox.textContent = "Нет доступа к базе данных. Проверь правила Firestore.";
+      console.error(e);
     }
-    race=s.data();
-    draw();
+  }
+
+  async function loadRating() {
+    const list = document.getElementById("rating");
+    list.innerHTML = "";
+
+    try {
+      const snap = await db
+        .collection("scores")
+        .orderBy("score", "desc")
+        .limit(3)
+        .get();
+
+      snap.forEach(doc => {
+        const data = doc.data();
+        const li = document.createElement("li");
+        li.textContent = `${data.name} — ${data.score}`;
+        list.appendChild(li);
+      });
+    } catch (e) {
+      errorBox.textContent = "Ошибка загрузки рейтинга. Возможно, запрещён доступ.";
+      console.error(e);
+    }
+  }
+
+  async function cleanOldScores() {
+    try {
+      const snap = await db
+        .collection("scores")
+        .orderBy("score", "desc")
+        .get();
+
+      if (snap.size <= 10) return;
+
+      const extra = snap.docs.slice(10);
+      for (const doc of extra) {
+        await doc.ref.delete();
+      }
+    } catch (e) {
+      console.error("Ошибка очистки рейтинга:", e);
+    }
+  }
+
+  // загружаем рейтинг после входа
+  auth.onAuthStateChanged(user => {
+    if (user) loadRating();
   });
-}
 
-function draw(){
-  status.innerText="Статус: "+race.raceStatus;
+  // ⭐ АНИМАЦИЯ ЗВЁЗД
+  const canvas = document.getElementById("stars");
+  const ctx = canvas.getContext("2d");
 
-  const inRace=race.players?.[user.uid];
-  let html="";
-
-  if(race.raceStatus==="LOBBY"){
-    if(!inRace)
-      html+=`<button class="btn join" onclick="join()">ПРИЄДНАТИСЯ</button>`;
-    else
-      html+=`<button class="btn start" onclick="start()">ПОЧАТИ ГОНКУ</button>`;
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
   }
 
-  if(race.raceStatus==="RACING"){
-    if(inRace)
-      html+=`<div class="push" onclick="push()">PUSH</div>`;
-    else
-      html+=`<p>Ви спостерігач…</p>`;
-  }
+  resize();
+  window.addEventListener("resize", resize);
 
-  if(race.raceStatus==="FINISHED"){
-    const name=race.players?.[race.winnerId]?.name || "UNKNOWN";
-    html+=`<h2>${name}</h2>
-           <button class="btn reset" onclick="reset()">НОВА ГОНКА</button>`;
-  }
+  const stars = Array.from({ length: 120 }, () => ({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    r: Math.random() * 1.5,
+    speed: Math.random() * 0.5 + 0.2
+  }));
 
-  main.innerHTML=html;
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  players.innerHTML="";
-  Object.entries(race.players||{})
-    .sort((a,b)=>b[1].position-a[1].position)
-    .forEach(([id,p],i)=>{
-      players.innerHTML+=`
-      <div class="player">
-        #${i+1} ${p.shipIcon} ${p.name} ${id===user.uid?"• ВИ":""}
-        <div class="bar"><div class="fill" style="width:${p.position}%"></div></div>
-      </div>`;
+    stars.forEach(s => {
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = "white";
+      ctx.fill();
+
+      s.y += s.speed;
+      if (s.y > canvas.height) s.y = 0;
     });
-}
 
-async function join(){
-  const icons=["🚀","🛰️","🛸","🌌","🌠","☄️"];
-  const c=Object.keys(race.players||{}).length;
-
-  await db.doc(DOC).update({
-    [`players.${user.uid}`]:{
-      name:"Пілот "+user.uid.slice(0,4),
-      position:0,
-      shipIcon:icons[c%icons.length]
-    },
-    lastUpdate:Date.now()
-  });
-}
-
-async function start(){
-  await db.doc(DOC).update({raceStatus:"RACING",lastUpdate:Date.now()});
-}
-
-async function push(){
-  const p=race.players[user.uid];
-  if(!p)return;
-
-  let pos=p.position+Math.random()*8+2;
-
-  if(pos>=100){
-    await db.doc(DOC).update({
-      [`players.${user.uid}.position`]:100,
-      raceStatus:"FINISHED",
-      winnerId:user.uid,
-      lastUpdate:Date.now()
-    });
-  }else{
-    await db.doc(DOC).update({
-      [`players.${user.uid}.position`]:pos,
-      lastUpdate:Date.now()
-    });
+    requestAnimationFrame(animate);
   }
-}
 
-async function reset(){
-  await db.doc(DOC).set({
-    raceStatus:"LOBBY",
-    players:{},
-    winnerId:null,
-    distanceToWin:100,
-    lastUpdate:Date.now()
-  });
-}
+  animate();
 </script>
+
 </body>
 </html>
