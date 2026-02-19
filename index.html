@@ -14,10 +14,9 @@
     body {
       font-family: Arial, sans-serif;
       height: 100vh;
-      background: #001a33;
+      background: radial-gradient(circle at 20% 20%, #0b0b2a, #000010 70%);
       color: white;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
       padding: 20px;
@@ -26,9 +25,14 @@
       background: rgba(0,0,40,0.8);
       padding: 30px;
       border-radius: 16px;
-      max-width: 500px;
+      max-width: 600px;
       width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
     }
+    h1 { text-align: center; margin-bottom: 20px; }
+    h3 { margin-top: 20px; margin-bottom: 10px; }
+    
     input, button {
       width: 100%;
       padding: 12px;
@@ -37,35 +41,79 @@
       border-radius: 8px;
       font-size: 16px;
     }
+    input {
+      background: white;
+      color: black;
+    }
     button {
       background: #4c7cff;
       color: white;
       cursor: pointer;
     }
     button:hover { background: #6a92ff; }
-    .players {
-      margin-top: 20px;
+    button:disabled { background: #999; cursor: not-allowed; }
+    
+    .status-bar {
+      text-align: center;
       padding: 15px;
-      background: rgba(76, 124, 255, 0.1);
+      background: rgba(76, 124, 255, 0.2);
       border-radius: 8px;
-      min-height: 100px;
+      margin: 15px 0;
+      font-weight: bold;
     }
-    .player {
-      padding: 10px;
-      background: rgba(76, 124, 255, 0.3);
+    
+    .track {
+      width: 100%;
+      height: 60px;
+      background: #111133;
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+      margin: 10px 0;
+      border: 2px solid #4c7cff;
+    }
+    
+    .ship {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      transform: translateY(-50%);
+      font-size: 28px;
+      transition: left .2s linear;
+    }
+    
+    .finish {
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: 4px;
+      height: 100%;
+      background: gold;
+    }
+    
+    .player-item {
+      padding: 12px;
+      background: rgba(76, 124, 255, 0.2);
       margin: 8px 0;
       border-radius: 5px;
+      border-left: 3px solid #4c7cff;
     }
-    .debug {
-      margin-top: 20px;
-      padding: 15px;
-      background: rgba(255,0,0,0.1);
-      border: 1px solid red;
-      border-radius: 8px;
-      font-size: 12px;
-      font-family: monospace;
-      max-height: 200px;
+    
+    .player-track {
+      width: 100%;
+      height: 30px;
+      background: #111133;
+      border-radius: 5px;
+      position: relative;
+      overflow: hidden;
+      margin-top: 8px;
+      border: 1px solid #4c7cff;
+    }
+    
+    .players-list {
+      max-height: 300px;
       overflow-y: auto;
+      margin: 10px 0;
     }
   </style>
 </head>
@@ -73,20 +121,27 @@
   <div class="container">
     <h1>🚀 Космическая гонка</h1>
     
-    <input id="nickname" placeholder="Введите ник" />
-    <button id="joinBtn">Присоединиться</button>
-    <button id="leaveBtn">Выйти</button>
+    <div class="status-bar" id="statusBar">Подключение...</div>
     
-    <div class="players">
-      <h3>Игроки:</h3>
-      <div id="playersList"></div>
-    </div>
-
-    <button id="clearBtn">Очистить БД (ТЕСТ)</button>
-
-    <div class="debug">
-      <h4>Отладка:</h4>
-      <div id="debug"></div>
+    <input id="nickname" placeholder="Введите ник" maxlength="15" />
+    <button id="joinBtn">Присоединиться</button>
+    
+    <div id="gameSection" style="display: none;">
+      <button id="startBtn">Начать гонку</button>
+      <button id="moveBtn">Ускорить</button>
+      <button id="leaveBtn" style="background: #ff6b6b;">Выйти из игры</button>
+      
+      <h3>Статус: <span id="gameStatus">ЛОББИ</span></h3>
+      <h3>Участники: <span id="playerCount">0</span></h3>
+      
+      <div class="players-list" id="playersList"></div>
+      
+      <h3>Ваш полёт:</h3>
+      <div class="track">
+        <div class="ship" id="ship">🚀</div>
+        <div class="finish"></div>
+      </div>
+      <div style="text-align: center; margin: 10px 0;">Прогресс: <span id="progress">0</span>%</div>
     </div>
   </div>
 
@@ -105,111 +160,180 @@
     const db = firebase.firestore();
 
     let userId = null;
-    let debugLog = [];
-
-    function log(message) {
-      console.log(message);
-      debugLog.push(message);
-      const debugDiv = document.getElementById('debug');
-      debugDiv.innerHTML = debugLog.map(m => `<div>${m}</div>`).join('');
-      debugDiv.scrollTop = debugDiv.scrollHeight;
-    }
+    let nickname = '';
+    let progress = 0;
+    let gameState = null;
 
     // Вход в систему
     auth.signInAnonymously().then(result => {
       userId = result.user.uid;
-      log('✓ Вход выполнен. ID: ' + userId.substring(0, 8) + '...');
+      document.getElementById('statusBar').textContent = '✓ Подключено к серверу';
+      console.log('User ID:', userId.substring(0, 8) + '...');
     }).catch(err => {
-      log('✗ Ошибка входа: ' + err.message);
+      document.getElementById('statusBar').textContent = '✗ Ошибка подключения';
+      console.error('Auth error:', err);
     });
 
     document.getElementById('joinBtn').addEventListener('click', async () => {
-      const nickname = document.getElementById('nickname').value.trim();
-      if (!nickname) {
-        alert('Введите ник');
+      const nameInput = document.getElementById('nickname').value.trim();
+      if (!nameInput) {
+        alert('Введите ник!');
         return;
       }
 
-      log(`→ Присоединяемся с ником: ${nickname}`);
+      nickname = nameInput;
+      console.log('Joining game with nickname:', nickname);
 
       try {
-        const gameRef = db.collection('games').doc('race_room');
-        
-        // Проверяем, существует ли документ
-        const doc = await gameRef.get();
-        log(`→ Документ существует: ${doc.exists}`);
-
-        // Добавляем игрока
-        await gameRef.set({
+        await db.collection('games').doc('race_room').set({
+          status: 'ЛОББИ',
           [`players.${userId}`]: {
             nickname: nickname,
             progress: 0,
-            timestamp: new Date().getTime()
-          },
-          status: 'ЛОББИ',
-          updatedAt: new Date()
+            joinedAt: new Date().getTime()
+          }
         }, { merge: true });
 
-        log(`✓ Игрок добавлен в БД`);
-        listenToPlayers();
+        document.getElementById('gameSection').style.display = 'block';
+        listenToGame();
       } catch (err) {
-        log(`✗ Ошибка: ${err.message}`);
+        alert('Ошибка: ' + err.message);
+        console.error(err);
       }
     });
 
-    function listenToPlayers() {
-      log('→ Начинаем слушать изменения...');
-
+    function listenToGame() {
       db.collection('games').doc('race_room').onSnapshot(
         (doc) => {
           if (!doc.exists) {
-            log('✗ Документ race_room не существует');
+            console.log('Game document does not exist');
             return;
           }
 
-          const data = doc.data();
-          log(`✓ Данные получены. Игроков: ${Object.keys(data.players || {}).length}`);
+          gameState = doc.data();
+          console.log('Game state:', gameState);
 
-          const players = data.players || {};
-          const playersList = document.getElementById('playersList');
-          playersList.innerHTML = '';
+          // Обновляем статус
+          document.getElementById('gameStatus').textContent = gameState.status || 'ЛОББИ';
 
-          Object.entries(players).forEach(([id, player]) => {
-            const div = document.createElement('div');
-            div.className = 'player';
-            div.textContent = `${player.nickname} (${id.substring(0, 8)}...) - ${player.progress || 0}%`;
-            playersList.appendChild(div);
-          });
+          // Обновляем кнопку начала гонки
+          const startBtn = document.getElementById('startBtn');
+          if (gameState.status === 'ГОНКА') {
+            startBtn.disabled = true;
+            startBtn.textContent = 'Гонка идёт...';
+          } else {
+            startBtn.disabled = false;
+            startBtn.textContent = 'Начать гонку';
+          }
+
+          // Отрисовываем игроков
+          const players = gameState.players || {};
+          renderPlayers(players);
+          document.getElementById('playerCount').textContent = Object.keys(players).length;
+
+          // Обновляем свой прогресс
+          if (players[userId]) {
+            progress = players[userId].progress || 0;
+            updateShip();
+          }
+
+          // Проверяем победу
+          if (gameState.winner) {
+            alert('🏆 ' + gameState.winner + ' выиграл гонку!');
+          }
         },
         (error) => {
-          log(`✗ Ошибка слушателя: ${error.message}`);
+          console.error('Listener error:', error);
         }
       );
     }
 
-    document.getElementById('leaveBtn').addEventListener('click', async () => {
-      if (!userId) return;
-      log('→ Выходим из игры...');
+    function renderPlayers(players) {
+      const playersList = document.getElementById('playersList');
+      playersList.innerHTML = '';
 
+      const sorted = Object.entries(players)
+        .sort((a, b) => (b[1].progress || 0) - (a[1].progress || 0));
+
+      sorted.forEach(([id, player], idx) => {
+        const div = document.createElement('div');
+        div.className = 'player-item';
+        const isYou = id === userId ? ' (ВЫ)' : '';
+        
+        div.innerHTML = `
+          <div><strong>#${idx + 1} ${player.nickname}${isYou}</strong></div>
+          <div class="player-track">
+            <div class="ship" style="left: ${player.progress || 0}%; font-size: 20px;">🚀</div>
+            <div class="finish"></div>
+          </div>
+          <div style="text-align: right; font-size: 12px; opacity: 0.7;">${Math.round(player.progress || 0)}%</div>
+        `;
+        playersList.appendChild(div);
+      });
+    }
+
+    document.getElementById('startBtn').addEventListener('click', async () => {
+      if (gameState.status === 'ГОНКА') return;
+      console.log('Starting game...');
+
+      try {
+        await db.collection('games').doc('race_room').update({
+          status: 'ГОНКА',
+          startTime: new Date()
+        });
+      } catch (err) {
+        console.error('Start error:', err);
+      }
+    });
+
+    document.getElementById('moveBtn').addEventListener('click', async () => {
+      if (!gameState || gameState.status !== 'ГОНКА') {
+        alert('Гонка ещё не началась!');
+        return;
+      }
+
+      if (progress >= 100) {
+        alert('Вы уже финишировали!');
+        return;
+      }
+
+      progress += Math.floor(Math.random() * 15) + 5;
+      if (progress > 100) progress = 100;
+
+      updateShip();
+
+      try {
+        await db.collection('games').doc('race_room').update({
+          [`players.${userId}.progress`]: progress
+        });
+
+        if (progress === 100 && !gameState.winner) {
+          await db.collection('games').doc('race_room').update({
+            winner: nickname
+          });
+        }
+      } catch (err) {
+        console.error('Update error:', err);
+      }
+    });
+
+    document.getElementById('leaveBtn').addEventListener('click', async () => {
       try {
         await db.collection('games').doc('race_room').update({
           [`players.${userId}`]: firebase.firestore.FieldValue.delete()
         });
-        log('✓ Вышли из игры');
+        document.getElementById('gameSection').style.display = 'none';
+        document.getElementById('nickname').value = '';
+        progress = 0;
       } catch (err) {
-        log(`✗ Ошибка выхода: ${err.message}`);
+        console.error('Leave error:', err);
       }
     });
 
-    document.getElementById('clearBtn').addEventListener('click', async () => {
-      log('→ Очищаем БД...');
-      try {
-        await db.collection('games').doc('race_room').delete();
-        log('✓ БД очищена');
-      } catch (err) {
-        log(`✗ Ошибка: ${err.message}`);
-      }
-    });
+    function updateShip() {
+      document.getElementById('ship').style.left = progress + '%';
+      document.getElementById('progress').textContent = progress;
+    }
   </script>
 </body>
 </html>
