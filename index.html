@@ -75,19 +75,6 @@
       overflow: hidden;
     }
 
-    /* Новая зеленая полоса прогресса */
-    .progress-bar {
-      position: absolute;
-      top: 0;
-      left: 0;
-      height: 100%;
-      width: 0%;
-      background: #00ff00;
-      border-radius: 40px 0 0 40px;
-      z-index: 0;
-      transition: width 0.1s linear;
-    }
-
     .ship {
       position: absolute;
       top: 50%;
@@ -95,7 +82,6 @@
       transform: translateY(-50%);
       font-size: 32px;
       transition: left .1s linear;
-      z-index: 1; /* кораблик поверх полосы */
     }
 
     .finish {
@@ -105,7 +91,6 @@
       width: 6px;
       height: 100%;
       background: gold;
-      z-index: 2;
     }
 
     .progress {
@@ -127,7 +112,6 @@
   <!-- ИГРА -->
   <div class="game" id="game">
     <div class="track">
-      <div class="progress-bar" id="progressBar"></div>
       <div class="ship" id="ship">🚀</div>
       <div class="finish"></div>
     </div>
@@ -149,7 +133,6 @@
     const ship = document.getElementById('ship');
     const progressText = document.getElementById('progress');
     const winnerText = document.getElementById('winnerText');
-    const progressBar = document.getElementById('progressBar');
 
     let progress = 0;
     let nickname = '';
@@ -186,7 +169,6 @@
     function updateShip() {
       ship.style.left = progress + '%';
       progressText.textContent = progress + '%';
-      progressBar.style.width = progress + '%';
     }
 
     function showWin() {
@@ -203,11 +185,10 @@
       updateShip();
     }
 
-    // Тесты
+    /* ==== ПРОСТЫЕ ТЕСТЫ (чтобы игра не ломалась) ==== */
     console.assert(typeof updateShip === 'function', 'updateShip должна существовать');
     console.assert(typeof showWin === 'function', 'showWin должна существовать');
     console.assert(typeof restart === 'function', 'restart должна существовать');
   </script>
 </body>
 </html>
-
