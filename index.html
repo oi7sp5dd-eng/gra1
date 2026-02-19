@@ -11,93 +11,93 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   
     <style>
-          body {
-                  background: black;
-                  color: #00ffcc;
-                  font-family: monospace;
-                  text-align: center;
-                  padding: 20px;
-          }
+      body {
+        background: black;
+        color: #00ffcc;
+        font-family: monospace;
+        text-align: center;
+        padding: 20px;
+      }
 
-          button {
-                  padding: 10px 20px;
-                  margin: 10px;
-                  font-size: 16px;
-                  background: #001f1f;
-                  color: #00ffcc;
-                  border: 1px solid #00ffcc;
-                  cursor: pointer;
-          }
+      button {
+        padding: 10px 20px;
+        margin: 10px;
+        font-size: 16px;
+        background: #001f1f;
+        color: #00ffcc;
+        border: 1px solid #00ffcc;
+        cursor: pointer;
+      }
 
-          .player {
-                  margin: 5px 0;
-          }
-        </style>
+      .player {
+        margin: 5px 0;
+      }
+    </style>
   </head>
   <body>
 
     <h1>🚀 COSMIC RACE</h1>
-  <div id="status">Загрузка...</div>
-  
-  <div id="controls" style="display:none;">
-    <button onclick="joinRace()">Присоединиться</button>
-    <button onclick="startRace()">Старт</button>
-    <button onclick="push()">PUSH</button>
-    <button onclick="resetGame()">Сброс</button>
-  </div>
-  
-  <h2>Телеметрия</h2>
-  <div id="players"></div>
-  
-  <script>
-    const firebaseConfig = {
+    <div id="status">Загрузка...</div>
+    
+    <div id="controls" style="display:none;">
+      <button onclick="joinRace()">Присоединиться</button>
+      <button onclick="startRace()">Старт</button>
+      <button onclick="push()">PUSH</button>
+      <button onclick="resetGame()">Сброс</button>
+    </div>
+    
+    <h2>Телеметрия</h2>
+    <div id="players"></div>
+    
+    <script>
+      const firebaseConfig = {
         apiKey: "AIzaSyCBb34F6rvslXnwv9HTddwPltllNMJjJMA",
         authDomain: "raketa-de669.firebaseapp.com",
         projectId: "raketa-de669",
         storageBucket: "raketa-de669.firebasestorage.app",
         messagingSenderId: "993322074392",
         appId: "1:993322074392:web:f6768a9065cce493ee1e6d"
-    };
+      };
 
-    firebase.initializeApp(firebaseConfig);
+      firebase.initializeApp(firebaseConfig);
 
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+      const auth = firebase.auth();
+      const db = firebase.firestore();
 
-    const RACE_DOC = "cosmic_race/race_state";
+      const RACE_DOC = "cosmic_race/race_state";
 
-    let user = null;
-    let raceState = null;
+      let user = null;
+      let raceState = null;
 
-    auth.signInAnonymously();
+      auth.signInAnonymously();
 
-    auth.onAuthStateChanged(u => {
+      auth.onAuthStateChanged(u => {
         user = u;
         document.getElementById("controls").style.display = "block";
         listenRace();
-    });
+      });
 
-    function listenRace() {
+      function listenRace() {
         db.doc(RACE_DOC).onSnapshot(doc => {
-              if (!doc.exists) {
-                      db.doc(RACE_DOC).set({
-                                raceStatus: "LOBBY",
-                                players: {},
-                                winnerId: null,
-                                distanceToWin: 100,
-                                lastUpdate: Date.now()
-                      });
-                      return;
-              }
+          if (!doc.exists) {
+            db.doc(RACE_DOC).set({
+              raceStatus: "LOBBY",
+              players: {},
+              winnerId: null,
+              distanceToWin: 100,
+              lastUpdate: Date.now()
+            });
+            return;
+          }
 
-              raceState = doc.data();
-              render();
+          raceState = doc.data();
+          render();
         });
-    }
+      }
 
-    function render() {
+      function render() {
         document.getElementById("status").innerText =
-              "Статус: " + raceState.raceStatus;
+          "Статус: " + raceState.raceStatus;
 
         const list = document.getElementById("players");
         list.innerHTML = "";
@@ -106,39 +106,39 @@
           .sort((a,b)=>b[1].position-a[1].position);
 
         players.forEach(([id,p],i)=>{
-              const el = document.createElement("div");
-              el.className="player";
-              el.innerText =
-                      `#${i+1} ${p.shipIcon} ${p.name} — ${Math.round(p.position)}%`
-                + (id===user.uid ? " (ты)" : "");
-              list.appendChild(el);
+          const el = document.createElement("div");
+          el.className="player";
+          el.innerText =
+            `#${i+1} ${p.shipIcon} ${p.name} — ${Math.round(p.position)}%`
+            + (id===user.uid ? " (ты)" : "");
+          list.appendChild(el);
         });
-    }
+      }
 
-    async function joinRace() {
+      async function joinRace() {
         if (!raceState || raceState.raceStatus !== "LOBBY") return;
 
         const icons = ["🚀","🛰️","🛸","🌌","🌠","☄️"];
         const count = Object.keys(raceState.players || {}).length;
 
         await db.doc(RACE_DOC).update({
-              [`players.${user.uid}`]: {
-                      name: "Пилот " + user.uid.substring(0,4),
-                      position: 0,
-                      shipIcon: icons[count % icons.length]
-              },
-              lastUpdate: Date.now()
+          [`players.${user.uid}`]: {
+            name: "Пилот " + user.uid.substring(0,4),
+            position: 0,
+            shipIcon: icons[count % icons.length]
+          },
+          lastUpdate: Date.now()
         });
-    }
+      }
 
-    async function startRace() {
+      async function startRace() {
         await db.doc(RACE_DOC).update({
-              raceStatus: "RACING",
-              lastUpdate: Date.now()
+          raceStatus: "RACING",
+          lastUpdate: Date.now()
         });
-    }
+      }
 
-    async function push() {
+      async function push() {
         if (!raceState || raceState.raceStatus !== "RACING") return;
 
         const player = raceState.players[user.uid];
@@ -147,30 +147,30 @@
         let newPos = player.position + Math.random()*8 + 2;
 
         if (newPos >= 100) {
-              await db.doc(RACE_DOC).update({
-                      [`players.${user.uid}.position`]: 100,
-                      raceStatus: "FINISHED",
-                      winnerId: user.uid,
-                      lastUpdate: Date.now()
-              });
+          await db.doc(RACE_DOC).update({
+            [`players.${user.uid}.position`]: 100,
+            raceStatus: "FINISHED",
+            winnerId: user.uid,
+            lastUpdate: Date.now()
+          });
         } else {
-              await db.doc(RACE_DOC).update({
-                      [`players.${user.uid}.position`]: newPos,
-                      lastUpdate: Date.now()
-              });
+          await db.doc(RACE_DOC).update({
+            [`players.${user.uid}.position`]: newPos,
+            lastUpdate: Date.now()
+          });
         }
-    }
+      }
 
-    async function resetGame() {
+      async function resetGame() {
         await db.doc(RACE_DOC).set({
-              raceStatus: "LOBBY",
-              players: {},
-              winnerId: null,
-              distanceToWin: 100,
-              lastUpdate: Date.now()
+          raceStatus: "LOBBY",
+          players: {},
+          winnerId: null,
+          distanceToWin: 100,
+          lastUpdate: Date.now()
         });
-    }
-  </script>
+      }
+    </script>
 
   </body>
 </html>
