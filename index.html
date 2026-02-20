@@ -1,262 +1,247 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Космічні Перегони - Multiplayer</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #030712; }
-        .progress-glow { box-shadow: 0 0 15px rgba(168, 85, 247, 0.4); }
-        .btn-active:active { transform: scale(0.95); }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cosmic Race</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+body { background:#030712; font-family: Inter, sans-serif; }
+.progress-glow { box-shadow:0 0 15px rgba(6,182,212,.4); }
+.btn-active:active { transform:scale(.95); }
+</style>
 </head>
 <body class="text-slate-200">
-    <div id="root"></div>
+<div id="root"></div>
 
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, updateDoc, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+window.firebaseModules = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, doc, setDoc, updateDoc, onSnapshot, runTransaction };
+</script>
 
-        window.firebaseModules = {
-            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
-            getFirestore, doc, setDoc, updateDoc, onSnapshot, runTransaction
-        };
-    </script>
-    
-    <script type="text/babel">
-        const {
-            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
-            getFirestore, doc, setDoc, updateDoc, onSnapshot, runTransaction
-        } = window.firebaseModules;
+<script type="text/babel">
 
-        const myConfig = {
-            apiKey: "AIzaSyCBb34F6rvslXnwv9HTddwPltllNMJjJMA",
-            authDomain: "raketa-de669.firebaseapp.com",
-            projectId: "raketa-de669",
-            storageBucket: "raketa-de669.firebasestorage.app",
-            messagingSenderId: "993322074392",
-            appId: "1:993322074392:web:f6768a9065cce493ee1e6d",
-        };
+const {
+initializeApp, getAuth, signInAnonymously, onAuthStateChanged,
+getFirestore, doc, setDoc, updateDoc, onSnapshot, runTransaction
+} = window.firebaseModules;
 
-        const firebaseConfig = window.__firebase_config ? JSON.parse(window.__firebase_config) : myConfig;
-        const appId = window.__app_id || firebaseConfig.projectId;
-        const RACE_DOC_PATH = `/artifacts/${appId}/public/data/cosmic_race/race_state`;
+const firebaseConfig = {
+apiKey: "AIzaSyCBb34F6rvslXnwv9HTddwPltllNMJjJMA",
+authDomain: "raketa-de669.firebaseapp.com",
+projectId: "raketa-de669",
+storageBucket: "raketa-de669.firebasestorage.app",
+messagingSenderId: "993322074392",
+appId: "1:993322074392:web:f6768a9065cce493ee1e6d"
+};
 
-        const App = () => {
-            const [db, setDb] = React.useState(null);
-            const [user, setUser] = React.useState(null);
-            const [race, setRace] = React.useState(null);
-            const [error, setError] = React.useState(null);
-            const [loading, setLoading] = React.useState(true);
+const appId = firebaseConfig.projectId;
+const RACE_DOC_PATH = `/artifacts/${appId}/public/data/cosmic_race/race_state`;
 
-            React.useEffect(() => {
-                try {
-                    const app = initializeApp(firebaseConfig);
-                    const auth = getAuth(app);
-                    const firestore = getFirestore(app);
-                    setDb(firestore);
+const App = () => {
 
-                    const performAuth = async () => {
-                        try {
-                            if (window.__initial_auth_token) {
-                                await signInWithCustomToken(auth, window.__initial_auth_token);
-                            } else {
-                                await signInAnonymously(auth);
-                            }
-                        } catch (e) {
-                            setError(`Помилка входу: ${e.message}`);
-                            setLoading(false);
-                        }
-                    };
+const [db,setDb] = React.useState(null);
+const [user,setUser] = React.useState(null);
+const [race,setRace] = React.useState(null);
+const [loading,setLoading] = React.useState(true);
 
-                    performAuth();
-                    return onAuthStateChanged(auth, (u) => {
-                        setUser(u);
-                        if (u) setLoading(false);
-                    });
-                } catch (e) {
-                    setError(`Критична помилка: ${e.message}`);
-                    setLoading(false);
-                }
-            }, []);
+React.useEffect(()=>{
 
-            React.useEffect(() => {
-                if (!db || !user) return;
-                const raceRef = doc(db, RACE_DOC_PATH);
-                
-                const unsub = onSnapshot(raceRef, (snap) => {
-                    if (snap.exists()) {
-                        setRace(snap.data());
-                    } else {
-                        reset(); // Создать если пусто
-                    }
-                }, (err) => {
-                    setError(`Помилка БД: ${err.message}`);
-                });
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const firestore = getFirestore(app);
+setDb(firestore);
 
-                return () => unsub();
-            }, [db, user]);
+signInAnonymously(auth);
 
-            const join = async () => {
-                if (!db || !user || race?.raceStatus !== 'LOBBY') return;
-                const raceRef = doc(db, RACE_DOC_PATH);
-                try {
-                    await runTransaction(db, async (tx) => {
-                        const snap = await tx.get(raceRef);
-                        const data = snap.data();
-                        if (data.players[user.uid]) return;
-                        
-                        const icons = ["🚀", "🛸", "🛰️", "🌠", "☄️"];
-                        const names = ["MIEL", "ZETA", "ORION", "NOVA", "VEGA"];
-                        tx.update(raceRef, {
-                            [`players.${user.uid}`]: {
-                                name: `ПІЛОТ ${names[Object.keys(data.players || {}).length % names.length]}`,
-                                position: 0,
-                                shipIcon: icons[Object.keys(data.players || {}).length % icons.length]
-                            },
-                            lastUpdate: Date.now()
-                        });
-                    });
-                } catch (e) { console.error("Join error:", e); }
-            };
+return onAuthStateChanged(auth,(u)=>{
+setUser(u);
+if(u) setLoading(false);
+});
 
-            const start = () => updateDoc(doc(db, RACE_DOC_PATH), { raceStatus: 'RACING', lastUpdate: Date.now() });
-            
-            const move = async () => {
-                if (race?.raceStatus !== 'RACING') return;
-                const raceRef = doc(db, RACE_DOC_PATH);
-                const currentPos = race.players[user.uid]?.position || 0;
-                const newPos = currentPos + Math.random() * 5 + 3;
-                
-                if (newPos >= 100) {
-                    await updateDoc(raceRef, {
-                        [`players.${user.uid}.position`]: 100,
-                        raceStatus: 'FINISHED',
-                        winnerId: user.uid,
-                        lastUpdate: Date.now()
-                    });
-                } else {
-                    await updateDoc(raceRef, { 
-                        [`players.${user.uid}.position`]: newPos,
-                        lastUpdate: Date.now()
-                    });
-                }
-            };
+},[]);
 
-            const reset = () => setDoc(doc(db, RACE_DOC_PATH), { 
-                raceStatus: 'LOBBY', 
-                players: {}, 
-                winnerId: null,
-                lastUpdate: Date.now()
-            });
+React.useEffect(()=>{
 
-            if (error) return (
-                <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center bg-gray-950">
-                    <div className="bg-red-900/10 border border-red-500/50 p-8 rounded-3xl max-w-sm">
-                        <h2 className="text-xl font-bold text-red-400 mb-2">Помилка системи</h2>
-                        <p className="text-sm text-slate-400 mb-6">{error}</p>
-                        <button onClick={() => window.location.reload()} className="w-full bg-red-500 text-white py-3 rounded-xl font-bold">ОНОВИТИ</button>
-                    </div>
-                </div>
-            );
+if(!db || !user) return;
 
-            if (loading) return (
-                <div className="flex flex-col items-center justify-center min-h-screen bg-gray-950">
-                    <div className="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin mb-4"></div>
-                    <div className="text-cyan-400 font-bold tracking-widest animate-pulse uppercase text-xs">Встановлення зв'язку...</div>
-                </div>
-            );
+const raceRef = doc(db,RACE_DOC_PATH);
 
-            const isParticipant = race?.players?.[user.uid];
+const unsub = onSnapshot(raceRef,(snap)=>{
+if(snap.exists()){
+setRace(snap.data());
+}else{
+console.log("Race doc not created yet");
+}
+});
 
-            return (
-                <div className="max-w-md mx-auto p-6 space-y-6 min-h-screen flex flex-col">
-                    <header className="text-center pt-4">
-                        <h1 className="text-4xl font-black tracking-tighter text-white italic">COSMIC RACE</h1>
-                        <p className="text-[10px] text-slate-500 font-mono mt-1 uppercase">Node: {appId.slice(-10)}</p>
-                    </header>
+return ()=>unsub();
 
-                    <main className="bg-slate-900/60 border border-slate-800 p-8 rounded-[2.5rem] shadow-2xl text-center space-y-6 backdrop-blur-md">
-                        {race?.raceStatus === 'LOBBY' && (
-                            <div className="py-4 space-y-6">
-                                <div className="text-yellow-500 text-[11px] font-black uppercase tracking-[0.2em]">Статус: Очікування</div>
-                                {!isParticipant ? (
-                                    <button onClick={join} className="btn-active w-full bg-cyan-600 hover:bg-cyan-500 py-5 rounded-2xl font-black text-white shadow-lg shadow-cyan-900/40 transition-all text-lg uppercase tracking-wider">Приєднатися</button>
-                                ) : (
-                                    <div className="space-y-4">
-                                        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400 text-sm font-bold">Ви у грі! Очікуйте старту...</div>
-                                        <button onClick={start} className="btn-active w-full bg-emerald-600 hover:bg-emerald-500 py-5 rounded-2xl font-black text-white shadow-lg shadow-emerald-900/40 transition-all text-lg uppercase tracking-wider">Почати гонку</button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+},[db,user]);
 
-                        {race?.raceStatus === 'RACING' && (
-                            <div className="py-4 space-y-8">
-                                <div className="text-cyan-500 text-[11px] font-black uppercase tracking-[0.2em] animate-pulse">Гонка активна</div>
-                                {isParticipant ? (
-                                    <button onClick={move} className="btn-active w-44 h-44 mx-auto bg-gradient-to-br from-cyan-400 to-blue-600 rounded-full border-[10px] border-white/5 shadow-[0_0_60px_rgba(6,182,212,0.4)] flex items-center justify-center text-4xl font-black italic text-white transition-transform active:scale-90">PUSH!</button>
-                                ) : (
-                                    <div className="py-10 text-slate-500 italic text-sm">Ви спостерігаєте за гонкою...</div>
-                                )}
-                            </div>
-                        )}
+const join = async ()=>{
 
-                        {race?.raceStatus === 'FINISHED' && (
-                            <div className="py-4 space-y-6">
-                                <div className="text-white text-[10px] font-black uppercase tracking-[0.2em]">Фініш</div>
-                                <div className="space-y-2">
-                                    <div className="text-4xl">🏆</div>
-                                    <h2 className="text-2xl font-black text-yellow-400 uppercase italic">Переміг {race.players[race.winnerId]?.name}!</h2>
-                                </div>
-                                <button onClick={reset} className="btn-active w-full bg-slate-800 hover:bg-slate-700 py-4 rounded-2xl font-bold text-white transition-all uppercase text-sm">Нова гра</button>
-                            </div>
-                        )}
-                    </main>
+if(!db || !user) return;
 
-                    <section className="flex-1 space-y-4">
-                        <div className="flex justify-between items-center px-2">
-                            <h3 className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Телеметрія</h3>
-                            <span className="text-[10px] text-slate-600 font-mono uppercase">{Object.keys(race?.players || {}).length} Пілотів</span>
-                        </div>
-                        <div className="space-y-3">
-                            {Object.entries(race?.players || {}).sort((a,b) => b[1].position - a[1].position).map(([id, p]) => (
-                                <div key={id} className={`p-4 rounded-3xl border transition-all ${id === user.uid ? 'bg-cyan-950/20 border-cyan-500/50' : 'bg-slate-900/40 border-slate-800/50'}`}>
-                                    <div className="flex items-center gap-4">
-                                        <div className="text-2xl drop-shadow-md">{p.shipIcon}</div>
-                                        <div className="flex-1">
-                                            <div className="flex justify-between text-[11px] font-bold mb-2 uppercase tracking-tight">
-                                                <span className={id === user.uid ? 'text-cyan-400' : 'text-slate-400'}>{p.name}</span>
-                                                <span className="font-mono">{Math.round(p.position)}%</span>
-                                            </div>
-                                            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                                                <div className={`h-full progress-glow transition-all duration-300 ${id === user.uid ? 'bg-cyan-500' : 'bg-slate-600'}`} style={{width: `${p.position}%`}}></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
+const raceRef = doc(db,RACE_DOC_PATH);
 
-                    <footer className="pt-4 opacity-30 hover:opacity-100 transition-opacity">
-                        <button onClick={reset} className="w-full py-3 text-[10px] text-slate-600 font-bold uppercase tracking-[0.3em] border border-slate-800/50 rounded-xl hover:bg-red-950/10 hover:text-red-900 hover:border-red-900/30 transition-all">
-                            Перезавантажити сервер гри (Сброс)
-                        </button>
-                    </footer>
-                </div>
-            );
-        };
+await runTransaction(db, async (tx)=>{
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+const snap = await tx.get(raceRef);
+
+if(!snap.exists()){
+tx.set(raceRef,{
+raceStatus:"LOBBY",
+players:{},
+winnerId:null,
+lastUpdate:Date.now()
+});
+return;
+}
+
+const data = snap.data();
+
+if(data.raceStatus === "FINISHED") return;
+if(data.players?.[user.uid]) return;
+
+const icons=["🚀","🛸","🛰️","🌠","☄️"];
+const names=["MIEL","ZETA","ORION","NOVA","VEGA"];
+const count = Object.keys(data.players || {}).length;
+
+tx.update(raceRef,{
+[`players.${user.uid}`]:{
+name:`ПІЛОТ ${names[count % names.length]}`,
+position:0,
+shipIcon:icons[count % icons.length]
+},
+lastUpdate:Date.now()
+});
+
+});
+
+};
+
+const start = async ()=>{
+await updateDoc(doc(db,RACE_DOC_PATH),{
+raceStatus:"RACING",
+lastUpdate:Date.now()
+});
+};
+
+const move = async ()=>{
+
+if(race?.raceStatus !== "RACING") return;
+if(!race.players?.[user.uid]) return;
+
+const raceRef = doc(db,RACE_DOC_PATH);
+const current = race.players[user.uid].position || 0;
+const newPos = current + Math.random()*5 + 3;
+
+if(newPos >= 100){
+await updateDoc(raceRef,{
+[`players.${user.uid}.position`]:100,
+raceStatus:"FINISHED",
+winnerId:user.uid,
+lastUpdate:Date.now()
+});
+}else{
+await updateDoc(raceRef,{
+[`players.${user.uid}.position`]:newPos,
+lastUpdate:Date.now()
+});
+}
+
+};
+
+const reset = async ()=>{
+await setDoc(doc(db,RACE_DOC_PATH),{
+raceStatus:"LOBBY",
+players:{},
+winnerId:null,
+lastUpdate:Date.now()
+});
+};
+
+if(loading) return <div className="flex justify-center items-center min-h-screen">Connecting...</div>;
+
+const isParticipant = race?.players?.[user.uid];
+
+return(
+<div className="max-w-md mx-auto p-6 space-y-6 min-h-screen flex flex-col">
+
+<header className="text-center pt-4">
+<h1 className="text-4xl font-black italic">COSMIC RACE</h1>
+</header>
+
+<main className="bg-slate-900/60 p-8 rounded-3xl text-center space-y-6">
+
+{(race?.raceStatus === "LOBBY" || race?.raceStatus === "RACING") && (
+<>
+{!isParticipant && (
+<button onClick={join} className="btn-active w-full bg-cyan-600 py-4 rounded-xl font-bold uppercase">
+Приєднатися
+</button>
+)}
+
+{race?.raceStatus === "LOBBY" && isParticipant && (
+<button onClick={start} className="btn-active w-full bg-emerald-600 py-4 rounded-xl font-bold uppercase">
+Почати гонку
+</button>
+)}
+
+{race?.raceStatus === "RACING" && isParticipant && (
+<button onClick={move} className="btn-active w-40 h-40 mx-auto bg-cyan-500 rounded-full text-3xl font-black">
+PUSH
+</button>
+)}
+</>
+)}
+
+{race?.raceStatus === "FINISHED" && (
+<>
+<h2 className="text-xl font-bold text-yellow-400">
+🏆 Переміг {race.players[race.winnerId]?.name}
+</h2>
+<button onClick={reset} className="w-full bg-slate-700 py-3 rounded-xl font-bold">
+Нова гра
+</button>
+</>
+)}
+
+</main>
+
+<section className="space-y-3">
+{Object.entries(race?.players || {})
+.sort((a,b)=>b[1].position - a[1].position)
+.map(([id,p])=>(
+<div key={id} className="p-4 bg-slate-800 rounded-xl">
+<div className="flex justify-between text-sm font-bold">
+<span>{p.shipIcon} {p.name}</span>
+<span>{Math.round(p.position)}%</span>
+</div>
+<div className="h-2 bg-slate-700 rounded-full mt-2 overflow-hidden">
+<div className="h-full bg-cyan-500 progress-glow"
+style={{width:`${p.position}%`}}></div>
+</div>
+</div>
+))}
+</section>
+
+</div>
+);
+};
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App/>);
+
+</script>
 </body>
 </html>
