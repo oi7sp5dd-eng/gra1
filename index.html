@@ -1,339 +1,297 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="uk">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Космическая гонка</title>
-  
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: Arial, sans-serif;
-      height: 100vh;
-      background: radial-gradient(circle at 20% 20%, #0b0b2a, #000010 70%);
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .container {
-      background: rgba(0,0,40,0.8);
-      padding: 30px;
-      border-radius: 16px;
-      max-width: 600px;
-      width: 100%;
-      max-height: 90vh;
-      overflow-y: auto;
-    }
-    h1 { text-align: center; margin-bottom: 20px; }
-    h3 { margin-top: 20px; margin-bottom: 10px; }
-    
-    input, button {
-      width: 100%;
-      padding: 12px;
-      margin: 10px 0;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-    }
-    input {
-      background: white;
-      color: black;
-    }
-    button {
-      background: #4c7cff;
-      color: white;
-      cursor: pointer;
-    }
-    button:hover { background: #6a92ff; }
-    button:disabled { background: #999; cursor: not-allowed; }
-    
-    .status-bar {
-      text-align: center;
-      padding: 15px;
-      background: rgba(76, 124, 255, 0.2);
-      border-radius: 8px;
-      margin: 15px 0;
-      font-weight: bold;
-    }
-    
-    .track {
-      width: 100%;
-      height: 60px;
-      background: #111133;
-      border-radius: 10px;
-      position: relative;
-      overflow: hidden;
-      margin: 10px 0;
-      border: 2px solid #4c7cff;
-    }
-    
-    .ship {
-      position: absolute;
-      top: 50%;
-      left: 0;
-      transform: translateY(-50%);
-      font-size: 28px;
-      transition: left .2s linear;
-    }
-    
-    .finish {
-      position: absolute;
-      right: 0;
-      top: 0;
-      width: 4px;
-      height: 100%;
-      background: gold;
-    }
-    
-    .player-item {
-      padding: 12px;
-      background: rgba(76, 124, 255, 0.2);
-      margin: 8px 0;
-      border-radius: 5px;
-      border-left: 3px solid #4c7cff;
-    }
-    
-    .player-track {
-      width: 100%;
-      height: 30px;
-      background: #111133;
-      border-radius: 5px;
-      position: relative;
-      overflow: hidden;
-      margin-top: 8px;
-      border: 1px solid #4c7cff;
-    }
-    
-    .players-list {
-      max-height: 300px;
-      overflow-y: auto;
-      margin: 10px 0;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🚀 Космическая гонка</h1>
-    
-    <div class="status-bar" id="statusBar">Подключение...</div>
-    
-    <input id="nickname" placeholder="Введите ник" maxlength="15" />
-    <button id="joinBtn">Присоединиться</button>
-    
-    <div id="gameSection" style="display: none;">
-      <button id="startBtn">Начать гонку</button>
-      <button id="moveBtn">Ускорить</button>
-      <button id="leaveBtn" style="background: #ff6b6b;">Выйти из игры</button>
-      
-      <h3>Статус: <span id="gameStatus">ЛОББИ</span></h3>
-      <h3>Участники: <span id="playerCount">0</span></h3>
-      
-      <div class="players-list" id="playersList"></div>
-      
-      <h3>Ваш полёт:</h3>
-      <div class="track">
-        <div class="ship" id="ship">🚀</div>
-        <div class="finish"></div>
-      </div>
-      <div style="text-align: center; margin: 10px 0;">Прогресс: <span id="progress">0</span>%</div>
-    </div>
-  </div>
-
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyCBb34F6rvslXnwv9HTddwPltllNMJjJMA",
-      authDomain: "raketa-de669.firebaseapp.com",
-      projectId: "raketa-de669",
-      storageBucket: "raketa-de669.firebasestorage.app",
-      messagingSenderId: "993322074392",
-      appId: "1:993322074392:web:f6768a9065cce493ee1e6d"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-
-    let userId = null;
-    let nickname = '';
-    let progress = 0;
-    let gameState = null;
-
-    // Вход в систему
-    auth.signInAnonymously().then(result => {
-      userId = result.user.uid;
-      document.getElementById('statusBar').textContent = '✓ Подключено к серверу';
-      console.log('User ID:', userId.substring(0, 8) + '...');
-    }).catch(err => {
-      document.getElementById('statusBar').textContent = '✗ Ошибка подключения';
-      console.error('Auth error:', err);
-    });
-
-    document.getElementById('joinBtn').addEventListener('click', async () => {
-      const nameInput = document.getElementById('nickname').value.trim();
-      if (!nameInput) {
-        alert('Введите ник!');
-        return;
-      }
-
-      nickname = nameInput;
-      console.log('Joining game with nickname:', nickname);
-
-      try {
-        await db.collection('games').doc('race_room').set({
-          status: 'ЛОББИ',
-          [`players.${userId}`]: {
-            nickname: nickname,
-            progress: 0,
-            joinedAt: new Date().getTime()
-          }
-        }, { merge: true });
-
-        document.getElementById('gameSection').style.display = 'block';
-        listenToGame();
-      } catch (err) {
-        alert('Ошибка: ' + err.message);
-        console.error(err);
-      }
-    });
-
-    function listenToGame() {
-      db.collection('games').doc('race_room').onSnapshot(
-        (doc) => {
-          if (!doc.exists) {
-            console.log('Game document does not exist');
-            return;
-          }
-
-          gameState = doc.data();
-          console.log('Game state:', gameState);
-
-          // Обновляем статус
-          document.getElementById('gameStatus').textContent = gameState.status || 'ЛОББИ';
-
-          // Обновляем кнопку начала гонки
-          const startBtn = document.getElementById('startBtn');
-          if (gameState.status === 'ГОНКА') {
-            startBtn.disabled = true;
-            startBtn.textContent = 'Гонка идёт...';
-          } else {
-            startBtn.disabled = false;
-            startBtn.textContent = 'Начать гонку';
-          }
-
-          // Отрисовываем игроков
-          const players = gameState.players || {};
-          renderPlayers(players);
-          document.getElementById('playerCount').textContent = Object.keys(players).length;
-
-          // Обновляем свой прогресс
-          if (players[userId]) {
-            progress = players[userId].progress || 0;
-            updateShip();
-          }
-
-          // Проверяем победу
-          if (gameState.winner) {
-            alert('🏆 ' + gameState.winner + ' выиграл гонку!');
-          }
-        },
-        (error) => {
-          console.error('Listener error:', error);
-        }
-      );
-    }
-
-    function renderPlayers(players) {
-      const playersList = document.getElementById('playersList');
-      playersList.innerHTML = '';
-
-      const sorted = Object.entries(players)
-        .sort((a, b) => (b[1].progress || 0) - (a[1].progress || 0));
-
-      sorted.forEach(([id, player], idx) => {
-        const div = document.createElement('div');
-        div.className = 'player-item';
-        const isYou = id === userId ? ' (ВЫ)' : '';
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Race - Multiplayer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&family=Inter:wght@400;700&display=swap');
         
-        div.innerHTML = `
-          <div><strong>#${idx + 1} ${player.nickname}${isYou}</strong></div>
-          <div class="player-track">
-            <div class="ship" style="left: ${player.progress || 0}%; font-size: 20px;">🚀</div>
-            <div class="finish"></div>
-          </div>
-          <div style="text-align: right; font-size: 12px; opacity: 0.7;">${Math.round(player.progress || 0)}%</div>
-        `;
-        playersList.appendChild(div);
-      });
-    }
-
-    document.getElementById('startBtn').addEventListener('click', async () => {
-      if (gameState.status === 'ГОНКА') return;
-      console.log('Starting game...');
-
-      try {
-        await db.collection('games').doc('race_room').update({
-          status: 'ГОНКА',
-          startTime: new Date()
-        });
-      } catch (err) {
-        console.error('Start error:', err);
-      }
-    });
-
-    document.getElementById('moveBtn').addEventListener('click', async () => {
-      if (!gameState || gameState.status !== 'ГОНКА') {
-        alert('Гонка ещё не началась!');
-        return;
-      }
-
-      if (progress >= 100) {
-        alert('Вы уже финишировали!');
-        return;
-      }
-
-      progress += Math.floor(Math.random() * 15) + 5;
-      if (progress > 100) progress = 100;
-
-      updateShip();
-
-      try {
-        await db.collection('games').doc('race_room').update({
-          [`players.${userId}.progress`]: progress
-        });
-
-        if (progress === 100 && !gameState.winner) {
-          await db.collection('games').doc('race_room').update({
-            winner: nickname
-          });
+        body {
+            background-color: #020617;
+            color: #e2e8f0;
+            font-family: 'Inter', sans-serif;
         }
-      } catch (err) {
-        console.error('Update error:', err);
-      }
-    });
 
-    document.getElementById('leaveBtn').addEventListener('click', async () => {
-      try {
-        await db.collection('games').doc('race_room').update({
-          [`players.${userId}`]: firebase.firestore.FieldValue.delete()
+        .font-orbital {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .race-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .race-btn:active {
+            transform: scale(0.95);
+        }
+
+        .progress-bar-glow {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+        }
+
+        [onclick] { cursor: pointer; }
+    </style>
+</head>
+<body class="min-h-screen p-4">
+
+    <div id="app" class="max-w-md mx-auto space-y-6 opacity-0 transition-opacity duration-500">
+        <!-- Header -->
+        <div class="flex justify-between items-end border-b border-slate-800 pb-4">
+            <div>
+                <h1 class="text-2xl font-black italic text-white tracking-tighter font-orbital">COSMIC RACE</h1>
+                <p class="text-[10px] text-slate-500 uppercase tracking-widest">Status: Operational</p>
+            </div>
+            <button onclick="resetGame()" class="text-[10px] text-slate-600 hover:text-red-500 underline">
+                Скинути систему
+            </button>
+        </div>
+
+        <!-- Main Console -->
+        <div id="main-console" class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+            <!-- Динамічний контент -->
+        </div>
+
+        <!-- Leaderboard -->
+        <div class="space-y-4">
+            <div class="flex justify-between items-center px-2">
+                <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Телеметрія пілотів</h3>
+                <span id="player-count" class="text-[10px] text-slate-600">0 ПІЛОТІВ</span>
+            </div>
+            <div id="leaderboard" class="space-y-2">
+                <!-- Список гравців -->
+            </div>
+        </div>
+
+        <div class="text-[9px] text-center text-slate-700 font-mono mt-8 uppercase tracking-widest">
+            User Node: <span id="user-id-display">...</span>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loader" class="fixed inset-0 flex items-center justify-center bg-slate-950 z-50">
+        <div class="text-cyan-400 font-orbital italic animate-pulse tracking-widest">З'ЄДНАННЯ З ЦЕНТРОМ КЕРУВАННЯ...</div>
+    </div>
+
+    <!-- Firebase Scripts -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Config
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "", 
+            authDomain: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: ""
+        };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'cosmic-race-html';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Ініціалізація
+        const firebaseApp = initializeApp(firebaseConfig);
+        const auth = getAuth(firebaseApp);
+        const db = getFirestore(firebaseApp);
+        
+        // КРИТИЧНО: Шлях має починатися з "/" і відповідати структурі artifacts/{appId}/public/data
+        const RACE_DOC_PATH = `/artifacts/${appId}/public/data/cosmic_race/race_state`;
+        
+        let currentUser = null;
+        let currentRaceData = null;
+
+        // Авторизація перед початком роботи з БД
+        const initAuth = async () => {
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth Error", err);
+            }
+        };
+
+        initAuth();
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('user-id-display').textContent = user.uid;
+                initRaceListener();
+            }
         });
-        document.getElementById('gameSection').style.display = 'none';
-        document.getElementById('nickname').value = '';
-        progress = 0;
-      } catch (err) {
-        console.error('Leave error:', err);
-      }
-    });
 
-    function updateShip() {
-      document.getElementById('ship').style.left = progress + '%';
-      document.getElementById('progress').textContent = progress;
-    }
-  </script>
+        function initRaceListener() {
+            if (!currentUser) return;
+            const raceRef = doc(db, RACE_DOC_PATH);
+            
+            // Додаємо обробник помилок для onSnapshot (обов'язково)
+            onSnapshot(raceRef, (docSnap) => {
+                document.getElementById('loader').classList.add('hidden');
+                document.getElementById('app').classList.remove('opacity-0');
+
+                if (docSnap.exists()) {
+                    currentRaceData = docSnap.data();
+                    renderUI();
+                } else {
+                    // Створення початкового стану, якщо документа немає
+                    setDoc(raceRef, {
+                        raceStatus: 'LOBBY',
+                        players: {},
+                        winnerId: null,
+                        lastUpdate: Date.now()
+                    });
+                }
+            }, (error) => {
+                console.error("Firestore Listener Error:", error);
+            });
+        }
+
+        window.joinRace = async () => {
+            if (!currentUser || !currentRaceData || currentRaceData.raceStatus !== 'LOBBY') return;
+            const raceRef = doc(db, RACE_DOC_PATH);
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const snap = await transaction.get(raceRef);
+                    const data = snap.data();
+                    const players = data.players || {};
+                    
+                    if (players[currentUser.uid]) return;
+
+                    const icons = ["🚀", "🛰️", "🛸", "🌌", "🌠", "☄️"];
+                    const count = Object.keys(players).length;
+
+                    transaction.update(raceRef, {
+                        [`players.${currentUser.uid}`]: {
+                            name: `Пілот ${currentUser.uid.substring(0, 4)}`,
+                            position: 0,
+                            shipIcon: icons[count % icons.length]
+                        },
+                        lastUpdate: Date.now()
+                    });
+                });
+            } catch (e) { console.error("Join Error:", e); }
+        };
+
+        window.startRace = async () => {
+            if (!currentUser) return;
+            const raceRef = doc(db, RACE_DOC_PATH);
+            await updateDoc(raceRef, { raceStatus: 'RACING', lastUpdate: Date.now() });
+        };
+
+        window.makeProgress = async () => {
+            if (!currentUser || currentRaceData?.raceStatus !== 'RACING') return;
+            const player = currentRaceData.players[currentUser.uid];
+            if (!player) return;
+
+            const newPos = player.position + Math.random() * 8 + 2;
+            const raceRef = doc(db, RACE_DOC_PATH);
+
+            if (newPos >= 100) {
+                await updateDoc(raceRef, {
+                    [`players.${currentUser.uid}.position`]: 100,
+                    raceStatus: 'FINISHED',
+                    winnerId: currentUser.uid,
+                    lastUpdate: Date.now()
+                });
+            } else {
+                await updateDoc(raceRef, {
+                    [`players.${currentUser.uid}.position`]: newPos,
+                    lastUpdate: Date.now()
+                });
+            }
+        };
+
+        window.resetGame = async () => {
+            if (!currentUser) return;
+            const raceRef = doc(db, RACE_DOC_PATH);
+            await setDoc(raceRef, {
+                raceStatus: 'LOBBY',
+                players: {},
+                winnerId: null,
+                lastUpdate: Date.now()
+            });
+        };
+
+        function renderUI() {
+            const consoleEl = document.getElementById('main-console');
+            const leaderboardEl = document.getElementById('leaderboard');
+            const playerCountEl = document.getElementById('player-count');
+            
+            const isUserInRace = !!currentRaceData.players[currentUser.uid];
+            const playersList = Object.entries(currentRaceData.players || {})
+                .map(([id, data]) => ({ id, ...data }))
+                .sort((a, b) => b.position - a.position);
+
+            playerCountEl.textContent = `${playersList.length} ПІЛОТІВ`;
+
+            // Render Console
+            let consoleHTML = `<div class="absolute top-0 right-0 p-2 opacity-5 text-4xl italic font-black font-orbital select-none uppercase">${currentRaceData.raceStatus}</div>`;
+            
+            if (currentRaceData.raceStatus === 'LOBBY') {
+                consoleHTML += `
+                    <div class="text-center space-y-6 py-4">
+                        <div class="inline-block px-3 py-1 bg-yellow-500/10 text-yellow-500 text-[10px] font-bold rounded-full font-orbital tracking-wider">LOBBY_MODE</div>
+                        ${!isUserInRace 
+                            ? `<button onclick="joinRace()" class="race-btn w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-cyan-950/50">ПРИЄДНАТИСЯ</button>`
+                            : `<div class="space-y-4">
+                                <p class="text-sm text-slate-400">Система ініціалізована. Чекаємо на старт...</p>
+                                <button onclick="startRace()" class="race-btn w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-950/50">ПОЧАТИ ГОНКУ</button>
+                               </div>`
+                        }
+                    </div>
+                `;
+            } else if (currentRaceData.raceStatus === 'RACING') {
+                consoleHTML += `
+                    <div class="text-center space-y-8 py-4">
+                        <div class="inline-block px-3 py-1 bg-cyan-500/10 text-cyan-500 text-[10px] font-bold rounded-full font-orbital tracking-wider">RACING_ACTIVE</div>
+                        ${isUserInRace 
+                            ? `<button onclick="makeProgress()" class="race-btn w-32 h-32 mx-auto bg-gradient-to-br from-cyan-500 to-blue-700 rounded-full border-4 border-white/20 shadow-2xl flex items-center justify-center text-2xl font-black italic font-orbital text-white">PUSH!</button>`
+                            : `<div class="py-8 text-slate-500 italic text-sm">Ви в режимі спостерігача...</div>`
+                        }
+                    </div>
+                `;
+            } else if (currentRaceData.raceStatus === 'FINISHED') {
+                const winner = currentRaceData.players[currentRaceData.winnerId];
+                consoleHTML += `
+                    <div class="text-center space-y-6 py-4">
+                        <div class="inline-block px-3 py-1 bg-white/10 text-white text-[10px] font-bold rounded-full font-orbital tracking-wider">MISSION_COMPLETE</div>
+                        <div class="space-y-1">
+                            <p class="text-slate-400 text-xs uppercase tracking-widest font-bold">Winner identified</p>
+                            <h2 class="text-3xl font-black italic text-yellow-400 font-orbital">${winner?.name || 'UNKNOWN'}</h2>
+                        </div>
+                        <button onclick="resetGame()" class="race-btn w-full bg-white text-black font-bold py-4 rounded-2xl hover:bg-slate-200">НОВА ГОНКА</button>
+                    </div>
+                `;
+            }
+            consoleEl.innerHTML = consoleHTML;
+
+            // Render Leaderboard
+            leaderboardEl.innerHTML = playersList.map((p, i) => `
+                <div class="p-4 rounded-2xl border transition-all ${p.id === currentUser.uid ? 'bg-cyan-950/20 border-cyan-500/30' : 'bg-slate-900/50 border-slate-800'}">
+                    <div class="flex items-center gap-4">
+                        <div class="text-[10px] font-black text-slate-700 w-4">#${i + 1}</div>
+                        <div class="text-2xl">${p.shipIcon}</div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-end mb-1.5">
+                                <p class="text-[11px] truncate uppercase font-bold tracking-tight ${p.id === currentUser.uid ? 'text-cyan-400' : 'text-slate-400'}">
+                                    ${p.name} ${p.id === currentUser.uid ? '<span class="text-[9px] opacity-50 ml-1"> (Ви)</span>' : ''}
+                                </p>
+                                <p class="text-[10px] font-mono text-slate-500 font-bold">${Math.round(p.position)}%</p>
+                            </div>
+                            <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div class="h-full transition-all duration-300 progress-bar-glow ${p.id === currentUser.uid ? 'bg-cyan-500' : 'bg-slate-600'}" style="width: ${p.position}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+    </script>
 </body>
 </html>
